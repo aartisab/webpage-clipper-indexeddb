@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'WebpageClipperDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'clippedPages';
 
 // Database connection
@@ -19,15 +19,24 @@ async function initDB() {
     const db = event.target.result;
     
     // Create the object store (table) if it doesn't exist
-    if (!db.objectStoreNames.contains(STORE_NAME)) {
-      // Create a store with autoIncrement ID as key
-      const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-      
-      // Define indexes for faster queries
-      store.createIndex('url', 'url', { unique: false });
-      store.createIndex('timestamp', 'timestamp', { unique: false });
-      
-      console.log('Database schema created');
+    if (db.objectStoreNames.contains(STORE_NAME)) {
+      const transaction = event.target.transaction;
+      const store = transaction.objectStore(STORE_NAME);
+    
+      store.openCursor().onsuccess = function (e) {
+        const cursor = e.target.result;
+        if (cursor) {
+          const data = cursor.value;
+          if (!data.wordCount || !data.readingTime) {
+            const text = data.content || '';
+            const words = text.trim().split(/\s+/).filter(Boolean);
+            data.wordCount = words.length;
+            data.readingTime = Math.ceil(words.length / 200);
+            cursor.update(data);
+          }
+          cursor.continue();
+        }
+      };
     }
   };
   
@@ -53,12 +62,15 @@ async function addClippedPage(pageData) {
     throw new Error('Database not initialized');
   }
   
-  // Add timestamp if not provided
-  const data = { 
-    ...pageData,
-    timestamp: pageData.timestamp || new Date().toISOString()
-  };
-  
+  const text = pageData.content || '';
+const words = text.trim().split(/\s+/).filter(Boolean);
+
+const data = { 
+  ...pageData,
+  timestamp: pageData.timestamp || new Date().toISOString(),
+  wordCount: words.length,
+  readingTime: Math.ceil(words.length / 200)
+};
   try {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);

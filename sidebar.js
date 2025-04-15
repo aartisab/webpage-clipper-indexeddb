@@ -18,10 +18,10 @@ async function renderClippedPages() {
   try {
     // Get all clipped pages from IndexedDB
     const pages = await WebpageClipperDB.getAllPages();
-    
+
     // Clear the container
     clipContainer.innerHTML = '';
-    
+
     if (pages.length === 0) {
       // Show a message if there are no clipped pages
       clipContainer.innerHTML = `
@@ -32,33 +32,40 @@ async function renderClippedPages() {
       `;
       return;
     }
-    
+
     // Create the list element
     const listElement = document.createElement('div');
     listElement.className = 'clip-list';
-    
+
     // Sort pages by timestamp, newest first
     pages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
+
     // Add each page to the list
     pages.forEach(page => {
       const clipItem = document.createElement('div');
       clipItem.className = 'clip-item';
+
+      const wordCount = page.wordCount != null ? `${page.wordCount} words` : 'Unknown word count';
+      const readingTime = page.readingTime != null ? `${page.readingTime} min read` : 'Unknown reading time';
+
       clipItem.innerHTML = `
         <div class="clip-title">${page.title}</div>
         <a href="${page.url}" class="clip-url" target="_blank">${page.url}</a>
         <div class="clip-date">${formatDate(page.timestamp)}</div>
         <div class="clip-content">${page.content}</div>
+        <div class="clip-meta">
+          <span class="clip-words">📝 ${wordCount}</span>
+          <span class="clip-time">⏱️ ${readingTime}</span>
+        </div>
         <button class="delete-btn" data-id="${page.id}">×</button>
       `;
-      
-      // Add the item to the list
+
       listElement.appendChild(clipItem);
     });
-    
+
     // Add the list to the container
     clipContainer.appendChild(listElement);
-    
+
     // Add event listeners for delete buttons
     const deleteButtons = document.querySelectorAll('.delete-btn');
     deleteButtons.forEach(btn => {
@@ -66,14 +73,13 @@ async function renderClippedPages() {
         const id = parseInt(e.target.dataset.id, 10);
         try {
           await WebpageClipperDB.deletePage(id);
-          // Re-render the list
           await renderClippedPages();
         } catch (error) {
           console.error('Error deleting page:', error);
         }
       });
     });
-    
+
   } catch (error) {
     console.error('Error rendering clipped pages:', error);
     clipContainer.innerHTML = `
@@ -116,7 +122,6 @@ clearAllBtn.addEventListener('click', async () => {
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'newClip' && message.data) {
-    // Add the new clip to the database and refresh the UI
     (async () => {
       try {
         await WebpageClipperDB.addPage(message.data);
@@ -126,9 +131,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     })();
   }
-  // Don't return true here as we're not sending an asynchronous response
-  // Returning true was causing duplicate clips due to message port staying open
 });
 
-// Initialize when the document is loaded
+// Initialize on DOM load
 document.addEventListener('DOMContentLoaded', initialize);
